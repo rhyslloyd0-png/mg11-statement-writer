@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>MG11 Statement Writer</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Arimo:wght@400;700&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Caveat:wght@500&display=swap">
+<style>
+/* Layout: editor column + live A4 preview; on phones, Edit/Preview tabs. Document paper stays white in both themes. */
+:root{
+  --bg:#eef0f3; --panel:#ffffff; --fg:#1b2230; --muted:#5b6476; --line:#d5dae3;
+  --accent:#1f3d7a; --accent-ink:#ffffff; --accent-soft:#e3e9f6; --warn:#8a5a00; --warn-bg:#fdf3dc;
+  --paper:#ffffff; --ink:#111111; --rule:#222222; --shadow:0 1px 2px rgba(20,30,50,.08),0 8px 24px rgba(20,30,50,.10);
+  --ui:"Public Sans",system-ui,-apple-system,Segoe UI,sans-serif;
+  --doc:"Arimo",Arial,Helvetica,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  --sig:"Caveat","Segoe Script","Bradley Hand",cursive;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12161e; --panel:#1a202b; --fg:#e4e8f0; --muted:#98a2b6; --line:#2d3544;
+  --accent:#8fb0f0; --accent-ink:#0e1422; --accent-soft:#223152; --warn:#f0c46a; --warn-bg:#3a2e14;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12161e; --panel:#1a202b; --fg:#e4e8f0; --muted:#98a2b6; --line:#2d3544;
+  --accent:#8fb0f0; --accent-ink:#0e1422; --accent-soft:#223152; --warn:#f0c46a; --warn-bg:#3a2e14;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35); color-scheme:dark}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--ui);font-size:15px;line-height:1.45}
+.wrap{max-width:1400px;margin:0 auto;padding-inline:16px;padding-block:16px 40px}
+header.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+.brand{display:flex;align-items:baseline;gap:10px}
+.brand h1{font-size:20px;margin:0;letter-spacing:-.01em;text-wrap:balance}
+.brand .tag{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+button{font:inherit;font-size:14px;font-weight:600;border-radius:8px;padding:8px 14px;cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--fg)}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button.ghost{background:transparent}
+button.danger{color:#b3261e}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:8px;font-weight:600;font-size:14px;z-index:20}
+
+.tabs{display:none;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:4px;margin-bottom:12px}
+.tabs button{flex:1;border:0;background:transparent;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--accent-soft);color:var(--fg)}
+
+.grid{display:grid;grid-template-columns:minmax(0,440px) minmax(0,1fr);gap:20px;align-items:start}
+.editor{display:flex;flex-direction:column;gap:14px;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+.card h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 10px;font-weight:700}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.fields .full{grid-column:1/-1}
+label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600;min-width:0}
+label small{font-weight:400;color:var(--muted)}
+input,textarea,select{font:inherit;font-size:15px;font-weight:400;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:8px 10px;width:100%;min-width:0}
+textarea#body{min-height:340px;resize:vertical;font-family:var(--doc);line-height:1.55}
+.check{flex-direction:row;align-items:center;gap:8px;font-weight:500}
+.check input{width:auto}
+.snips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.snips button{font-size:12.5px;padding:5px 10px;font-weight:500}
+.meta{display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted);margin-top:6px;font-variant-numeric:tabular-nums}
+.banner{background:var(--warn-bg);color:var(--warn);border-radius:8px;padding:9px 12px;font-size:13.5px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.banner button{font-size:12.5px;padding:4px 10px}
+details summary{cursor:pointer;font-weight:600;font-size:14px}
+details ul{margin:8px 0 0;padding-left:0;list-style:none;display:grid;gap:6px;font-size:13.5px}
+details li b{font-family:var(--mono);color:var(--accent);display:inline-block;width:1.4em}
+
+.preview{min-width:0;position:sticky;top:calc(12px + env(safe-area-inset-top,0px))}
+.preview-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.pages{display:flex;flex-direction:column;gap:18px;max-height:calc(100vh - 80px);overflow-y:auto;overflow-x:hidden;padding:4px 4px 20px}
+.pagebox{position:relative;flex:none}
+
+/* ---- A4 document (794 x 1123 px) ---- */
+.page{position:absolute;top:0;left:0;width:794px;height:1123px;transform-origin:0 0;background:var(--paper);color:var(--ink);box-shadow:var(--shadow);font-family:var(--doc);font-size:13px;padding:42px 56px 36px;display:flex;flex-direction:column}
+.p-top{display:flex;justify-content:space-between;align-items:flex-start;font-size:12px;font-weight:700}
+.p-title{text-align:center;margin:6px 0 2px}
+.p-title b{font-size:17px;letter-spacing:.06em}
+.p-title div{font-size:10.5px;margin-top:3px}
+.urn{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700}
+.urn span{font-family:var(--mono);font-weight:500;border:1px solid var(--rule);padding:2px 8px;min-width:170px;letter-spacing:.08em;font-size:12px}
+.box{border:1.2px solid var(--rule);margin-top:10px}
+.row{display:flex;border-bottom:1px solid var(--rule);min-height:26px}
+.row:last-child{border-bottom:0}
+.cell{padding:4px 8px;display:flex;gap:6px;align-items:center;flex:1;min-width:0}
+.cell+.cell{border-left:1px solid var(--rule)}
+.cell b{white-space:nowrap;font-size:11.5px}
+.cell .v{font-size:13px}
+.decl{padding:7px 8px;font-size:11.3px;line-height:1.4}
+.sig{font-family:var(--sig);font-size:22px;line-height:1;color:#1a2a6a}
+.dots{flex:1;border-bottom:1px dotted var(--rule);min-height:20px;display:flex;align-items:flex-end;padding-left:4px}
+.tickrow{font-size:10.5px;display:flex;align-items:center;gap:6px;padding:4px 8px}
+.tick{width:12px;height:12px;border:1px solid var(--rule);display:inline-grid;place-items:center;font-size:10px;line-height:1}
+.p-body{flex:1;margin-top:12px;position:relative;font-size:15px;line-height:24px;overflow:hidden}
+.p-body .ln{height:24px;white-space:pre}
+.p-body svg{position:absolute;left:0;top:0}
+.p-foot{border-top:1.2px solid var(--rule);padding-top:8px;display:flex;gap:18px;align-items:flex-end;font-size:11.5px;font-weight:700}
+.p-foot .f{display:flex;gap:6px;align-items:flex-end;flex:1;min-width:0}
+.p-foot .pg{white-space:nowrap;font-variant-numeric:tabular-nums}
+.cont{font-size:12.5px;display:flex;justify-content:space-between;gap:12px;border:1.2px solid var(--rule);padding:6px 8px;margin-top:8px}
+.restricted{text-align:center;font-size:11px;font-weight:700;margin-top:6px}
+.det .row{min-height:30px}
+.det h3{font-size:13px;margin:16px 0 0;letter-spacing:.03em}
+
+@media (max-width:900px){
+  .tabs{display:flex}
+  .grid{grid-template-columns:minmax(0,1fr)}
+  .preview{position:static}
+  .pages{max-height:none;overflow:visible}
+  body.show-edit .preview{display:none}
+  body.show-preview .editor{display:none}
+}
+@media (max-width:420px){.fields{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+@media print{
+  @page{size:A4;margin:0}
+  body{background:#fff}
+  .wrap>*:not(.grid),.editor,.preview-head,.tabs,.toast{display:none!important}
+  .wrap{padding:0;max-width:none}
+  .grid{display:block}
+  .preview{position:static;display:block!important}
+  .pages{max-height:none;overflow:visible;gap:0;padding:0}
+  .pagebox{width:210mm!important;height:297mm!important;break-after:page;overflow:hidden}
+  .pagebox:last-child{break-after:auto}
+  .page{transform:scale(1)!important;box-shadow:none;width:210mm;height:297mm}
+}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand"><h1>MG11 Statement Writer</h1><span class="tag">Witness statement · CJA 1967 s.9</span></div>
+    <div class="actions">
+      <button class="primary" id="printBtn" type="button">Print / Save as PDF</button>
+      <button id="copyBtn" type="button">Copy statement text</button>
+      <button class="ghost" id="newBtn" type="button">New statement</button>
+    </div>
+  </header>
+
+  <div class="tabs" role="tablist">
+    <button type="button" role="tab" id="tabEdit" aria-selected="true">Edit</button>
+    <button type="button" role="tab" id="tabPrev" aria-selected="false">Preview <span id="tabCount"></span></button>
+  </div>
+
+  <div class="grid">
+    <div class="editor">
+      <div class="banner" id="exampleBanner" hidden>
+        <span>Example statement loaded so you can see the layout.</span>
+        <button type="button" id="clearExample">Clear and start mine</button>
+      </div>
+      <div class="banner" id="confirmNew" hidden>
+        <span>Clear every field and start a new statement?</span>
+        <span style="display:flex;gap:6px"><button type="button" class="danger" id="confirmYes">Clear all</button><button type="button" id="confirmNo">Keep</button></span>
+      </div>
+
+      <section class="card">
+        <h2>Witness</h2>
+        <div class="fields">
+          <label class="full">Statement of <small>Full name of the witness</small><input id="name" autocomplete="off"></label>
+          <label>Age if under 18 <input id="age" placeholder="Over 18"></label>
+          <label>Occupation <input id="occupation"></label>
+          <label>URN <small>Unique reference number</small><input id="urn" style="font-family:var(--mono)"></label>
+          <label>Date signed <input id="date" type="date"></label>
+          <label class="check full"><input type="checkbox" id="typedSig"> Show witness name as typed signature</label>
+          <label class="check full"><input type="checkbox" id="vrec"> Evidence visually recorded</label>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Statement</h2>
+        <div class="snips">
+          <button type="button" data-snip="open">+ Opening</button>
+          <button type="button" data-snip="time">+ Time &amp; place</button>
+          <button type="button" data-snip="desc">+ Suspect description</button>
+          <button type="button" data-snip="exhibit">+ Exhibit</button>
+          <button type="button" data-snip="court">+ Court willingness</button>
+        </div>
+        <textarea id="body" spellcheck="true" placeholder="Write in the first person, in the order events happened."></textarea>
+        <div class="meta"><span id="words">0 words</span><span id="pagesInfo">1 page</span></div>
+      </section>
+
+      <section class="card">
+        <h2>Statement taken by</h2>
+        <div class="fields">
+          <label>Officer name / number <input id="officer"></label>
+          <label>Station <input id="station"></label>
+          <label>Time from <input id="tFrom" type="time"></label>
+          <label>Time to <input id="tTo" type="time"></label>
+          <label class="full">Place statement taken <input id="place"></label>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Witness contact details</h2>
+        <div class="fields">
+          <label class="check full"><input type="checkbox" id="incDetails"> Add contact details page (restricted, not disclosed)</label>
+          <label class="full">Home address <input id="addr"></label>
+          <label>Postcode <input id="postcode"></label>
+          <label>Date of birth <input id="dob" type="date"></label>
+          <label>Phone <input id="phone" inputmode="tel"></label>
+          <label>Email <input id="email" type="email"></label>
+          <label class="full">Dates to avoid for court <input id="avoid"></label>
+        </div>
+      </section>
+
+      <section class="card">
+        <details>
+          <summary>ADVOKATE checklist for identification evidence</summary>
+          <ul>
+            <li><b>A</b>Amount of time the suspect was in view</li>
+            <li><b>D</b>Distance between witness and suspect</li>
+            <li><b>V</b>Visibility: lighting, weather, time of day</li>
+            <li><b>O</b>Obstructions to the view</li>
+            <li><b>K</b>Known or seen before, and when</li>
+            <li><b>A</b>Any reason to remember the suspect</li>
+            <li><b>T</b>Time lapse between seeing and identifying</li>
+            <li><b>E</b>Errors between first description and actual appearance</li>
+          </ul>
+        </details>
+      </section>
+    </div>
+
+    <div class="preview">
+      <div class="preview-head"><span>Live A4 preview</span><span id="pvCount"></span></div>
+      <div class="pages" id="pages"></div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const F=['name','age','occupation','urn','date','typedSig','vrec','body','officer','station','tFrom','tTo','place','incDetails','addr','postcode','dob','phone','email','avoid'];
+const $=id=>document.getElementById(id);
+const KEY='mg11-draft-v1';
+const PAGE_W=794, PAGE_H=1123, LH=24, TEXT_W=794-112;
+
+const EXAMPLE={
+  name:'Daniel James MORGAN',age:'Over 18',occupation:'Barista',urn:'01AB2345626',date:'2026-10-08',
+  typedSig:true,vrec:false,officer:'PC 4127 OKAFOR',station:'Central',tFrom:'14:20',tTo:'15:05',place:'Front office, Central police station',
+  incDetails:false,addr:'',postcode:'',dob:'',phone:'',email:'',avoid:'',
+  body:`I am the above named person. I work as a barista at a coffee shop on High Street. This statement relates to a vehicle collision I saw on Thursday 8th October 2026.
+
+At about 11:40 that morning I was standing outside the shop on my break. The weather was dry and bright and nothing was blocking my view of the road.
+
+I heard an engine revving loudly and looked to my right. I saw a dark blue hatchback travelling along High Street towards the market square. I would estimate it was going much faster than the other traffic, which was moving slowly because of the lunchtime crowds.
+
+The car mounted the pavement about 20 metres from where I was standing and hit the metal bollard outside the pharmacy. I heard a loud bang and saw the front of the car crumple.
+
+The driver got out straight away. He was a white man, about 25 years old, around 5'10" tall with a slim build. He had short dark hair and was wearing a grey hooded top and black tracksuit bottoms. I saw his face clearly for about five seconds as he looked back towards me. I had never seen him before.
+
+He ran off down Market Lane without speaking to anyone. Nobody appeared to be hurt.
+
+I would recognise the driver again if I saw him. I am willing to attend court to give evidence if required.`
+};
+
+const SNIPS={
+  open:'I am the above named person. This statement relates to ',
+  time:'At about [time] on [day and date] I was at [location]. The weather was [conditions] and the lighting was [conditions].',
+  desc:'The person I saw was a [sex], aged about [age], about [height] tall with a [build] build. They had [hair] and were wearing [clothing]. I saw them for about [time] from a distance of about [distance]. Nothing blocked my view.',
+  exhibit:'I produce [item] as exhibit [initials/number].',
+  court:'I am willing to attend court to give evidence if required.'
+};
+
+let state={};
+function read(){F.forEach(k=>{const el=$(k);state[k]=el.type==='checkbox'?el.checked:el.value});}
+function write(d){F.forEach(k=>{const el=$(k);if(el.type==='checkbox')el.checked=!!d[k];else el.value=d[k]||''});}
+function save(){try{localStorage.setItem(KEY,JSON.stringify({...state,_example:!$('exampleBanner').hidden}))}catch(e){}}
+function blank(){const d={};F.forEach(k=>d[k]='');d.typedSig=false;d.vrec=false;d.incDetails=false;d.age='Over 18';d.date=new Date().toISOString().slice(0,10);return d;}
+
+// ---- text wrapping using canvas measure ----
+const cv=document.createElement('canvas').getContext('2d');
+function wrapText(text){
+  cv.font='15px Arimo, Arial, Helvetica, sans-serif';
+  const out=[];
+  text.replace(/\r/g,'').split('\n').forEach(par=>{
+    if(!par.trim()){out.push('');return;}
+    let line='';
+    par.split(/ +/).forEach(word=>{
+      const test=line?line+' '+word:word;
+      if(cv.measureText(test).width<=TEXT_W){line=test;return;}
+      if(line)out.push(line);
+      line='';
+      while(cv.measureText(word).width>TEXT_W){
+        let i=word.length;while(i>1&&cv.measureText(word.slice(0,i)).width>TEXT_W)i--;
+        out.push(word.slice(0,i));word=word.slice(i);
+      }
+      line=word;
+    });
+    out.push(line);
+  });
+  while(out.length&&out[out.length-1]==='')out.pop();
+  return out;
+}
+
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function fmtDate(v){if(!v)return'';const [y,m,d]=v.split('-');return `${d}/${m}/${y}`;}
+function sigHTML(){return state.typedSig&&state.name?`<span class="sig">${esc(state.name.replace(/\b([A-Z]+)\b/g,w=>w[0]+w.slice(1).toLowerCase()))}</span>`:'';}
+
+function footer(i,n){
+  return `<div class="p-foot">
+    <div class="f">Signature:<span class="dots">${sigHTML()}</span></div>
+    <div class="f">Signature witnessed by:<span class="dots">${state.officer?`<span class="sig">${esc(state.officer)}</span>`:''}</span></div>
+    <div class="pg">Page ${i} of ${n}</div></div>`;
+}
+function page1(n){
+  return `<div class="page">
+    <div class="p-top"><span>RESTRICTED (when complete)</span><span>MG 11</span></div>
+    <div class="p-title"><b>WITNESS STATEMENT</b><div>Criminal Procedure Rules, r 16.2; Criminal Justice Act 1967, s. 9; Magistrates' Courts Act 1980, s.5B</div></div>
+    <div class="urn" style="justify-content:flex-end">URN<span>${esc(state.urn)}</span></div>
+    <div class="box">
+      <div class="row"><div class="cell"><b>Statement of:</b><span class="v">${esc(state.name)}</span></div></div>
+      <div class="row"><div class="cell"><b>Age if under 18:</b><span class="v">${esc(state.age||'Over 18')}</span></div><div class="cell"><b>Occupation:</b><span class="v">${esc(state.occupation)}</span></div></div>
+      <div class="row"><div class="decl">This statement (consisting of <b>${n}</b> page(s) each signed by me) is true to the best of my knowledge and belief and I make it knowing that, if it is tendered in evidence, I shall be liable to prosecution if I have wilfully stated anything in it, which I know to be false, or do not believe to be true.</div></div>
+      <div class="row"><div class="cell"><b>Signature:</b><span class="dots">${sigHTML()}</span></div><div class="cell" style="flex:.55"><b>Date:</b><span class="v">${fmtDate(state.date)}</span></div></div>
+      <div class="row"><div class="tickrow"><span class="tick">${state.vrec?'✓':''}</span> Tick if witness evidence is visually recorded (supply witness details on rear)</div></div>
+    </div>
+    <div class="p-body"></div>${footer(1,n)}</div>`;
+}
+function pageN(i,n){
+  return `<div class="page">
+    <div class="p-top"><span>RESTRICTED (when complete)</span><span>MG 11 Cont.</span></div>
+    <div class="cont"><span><b>Continuation of statement of:</b> ${esc(state.name)}</span><span style="white-space:nowrap"><b>URN</b> <span style="font-family:var(--mono)">${esc(state.urn)}</span></span></div>
+    <div class="p-body"></div>${footer(i,n)}</div>`;
+}
+function detailsPage(){
+  const r=(l,v)=>`<div class="row"><div class="cell"><b>${l}</b><span class="v">${esc(v)}</span></div></div>`;
+  return `<div class="page det">
+    <div class="p-top"><span>RESTRICTED (when complete)</span><span>MG 11 (rear)</span></div>
+    <div class="p-title"><b>WITNESS CONTACT DETAILS</b><div>Not to be disclosed to the defence</div></div>
+    <div class="urn" style="justify-content:flex-end">URN<span>${esc(state.urn)}</span></div>
+    <h3>Witness</h3>
+    <div class="box">${r('Name:',state.name)}${r('Home address:',state.addr)}${r('Postcode:',state.postcode)}${r('Date of birth:',fmtDate(state.dob))}${r('Telephone:',state.phone)}${r('Email:',state.email)}${r('Dates to avoid:',state.avoid)}</div>
+    <h3>Statement taken by</h3>
+    <div class="box">${r('Officer:',state.officer)}${r('Station:',state.station)}
+      <div class="row"><div class="cell"><b>Time from:</b><span class="v">${esc(state.tFrom)}</span></div><div class="cell"><b>Time to:</b><span class="v">${esc(state.tTo)}</span></div></div>
+      ${r('Place:',state.place)}</div>
+    <div style="flex:1"></div><div class="restricted">RESTRICTED (when complete)</div></div>`;
+}
+
+function mount(html,host){const box=document.createElement('div');box.className='pagebox';box.innerHTML=html;host.appendChild(box);return box;}
+function fill(body,lines){body.innerHTML=lines.map(l=>`<div class="ln">${esc(l)||'&nbsp;'}</div>`).join('');}
+function strike(body,used){
+  const h=body.offsetHeight, y=used*LH+6;
+  if(h-y<LH*2)return;
+  body.insertAdjacentHTML('beforeend',`<svg width="${TEXT_W}" height="${h}" aria-hidden="true"><line x1="0" y1="${y}" x2="${TEXT_W}" y2="${h-4}" stroke="#222" stroke-width="1.2"/></svg>`);
+}
+
+function render(){
+  const host=$('pages');host.innerHTML='';
+  const lines=wrapText(state.body||'');
+  // measure capacities
+  let b=mount(page1(1),host);const cap1=Math.floor(b.querySelector('.p-body').offsetHeight/LH);
+  let c=mount(pageN(2,2),host);const capN=Math.floor(c.querySelector('.p-body').offsetHeight/LH);
+  host.innerHTML='';
+  const n=1+Math.max(0,Math.ceil((lines.length-cap1)/capN));
+  const boxes=[];
+  let rest=lines.slice();
+  for(let i=1;i<=n;i++){
+    const box=mount(i===1?page1(n):pageN(i,n),host);
+    const take=rest.splice(0,i===1?cap1:capN);
+    const body=box.querySelector('.p-body');fill(body,take);
+    if(i===n)strike(body,take.length);
+    boxes.push(box);
+  }
+  if(state.incDetails)boxes.push(mount(detailsPage(),host));
+  scale();
+  const words=(state.body.trim().match(/\S+/g)||[]).length;
+  $('words').textContent=`${words} word${words===1?'':'s'}`;
+  const p=`${n} page${n===1?'':'s'}`;
+  $('pagesInfo').textContent=p;$('pvCount').textContent=p+(state.incDetails?' + contact details':'');$('tabCount').textContent=`(${n})`;
+}
+function scale(){
+  const host=$('pages');const w=host.clientWidth-8;if(w<=0)return;
+  const s=Math.min(1,w/PAGE_W);
+  host.querySelectorAll('.pagebox').forEach(b=>{b.style.width=PAGE_W*s+'px';b.style.height=PAGE_H*s+'px';b.firstElementChild.style.transform=`scale(${s})`;});
+}
+
+function plainText(){
+  const L=[];
+  L.push('RESTRICTED (when complete)                                   MG 11','WITNESS STATEMENT','Criminal Procedure Rules, r 16.2; Criminal Justice Act 1967, s. 9; Magistrates\' Courts Act 1980, s.5B','');
+  L.push(`URN: ${state.urn}`,`Statement of: ${state.name}`,`Age if under 18: ${state.age||'Over 18'}`,`Occupation: ${state.occupation}`,'');
+  const n=$('pages').querySelectorAll('.pagebox').length-(state.incDetails?1:0);
+  L.push(`This statement (consisting of ${n} page(s) each signed by me) is true to the best of my knowledge and belief and I make it knowing that, if it is tendered in evidence, I shall be liable to prosecution if I have wilfully stated anything in it, which I know to be false, or do not believe to be true.`,'');
+  L.push(`Signature: ${state.typedSig?state.name:''}    Date: ${fmtDate(state.date)}`,'','',state.body.trim(),'','');
+  L.push(`Signature: ${state.typedSig?state.name:''}    Signature witnessed by: ${state.officer}`);
+  if(state.officer||state.station)L.push('',`Statement taken by: ${state.officer}, ${state.station}. ${state.tFrom}${state.tTo?' to '+state.tTo:''}. ${state.place}`);
+  return L.join('\n');
+}
+
+function toast(msg){const t=$('toast');t.textContent=msg;t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>t.hidden=true,1800);}
+
+let pending;
+function onChange(){read();save();clearTimeout(pending);pending=setTimeout(render,120);}
+F.forEach(k=>{$(k).addEventListener('input',onChange);$(k).addEventListener('change',onChange)});
+
+document.querySelectorAll('[data-snip]').forEach(b=>b.addEventListener('click',()=>{
+  const ta=$('body'),s=SNIPS[b.dataset.snip];
+  const pre=ta.value.slice(0,ta.selectionStart),post=ta.value.slice(ta.selectionEnd);
+  const sep=pre&&!pre.endsWith('\n\n')?(pre.endsWith('\n')?'\n':'\n\n'):'';
+  ta.value=pre+sep+s+post;const pos=(pre+sep+s).length;ta.focus();ta.setSelectionRange(pos,pos);onChange();
+}));
+
+$('printBtn').addEventListener('click',()=>{const p=document.body.className;document.body.className='show-preview';render();setTimeout(()=>{window.print();document.body.className=p;scale();},150);});
+$('copyBtn').addEventListener('click',()=>{
+  const txt=plainText();
+  const fallback=()=>{const ta=$('body');ta.focus();ta.select();toast('Select and copy the statement text');};
+  try{navigator.clipboard.writeText(txt).then(()=>toast('Statement copied'),fallback);}catch(e){fallback();}
+});
+$('newBtn').addEventListener('click',()=>{$('confirmNew').hidden=false;$('confirmNew').scrollIntoView({block:'nearest'});});
+$('confirmNo').addEventListener('click',()=>$('confirmNew').hidden=true);
+$('confirmYes').addEventListener('click',()=>{write(blank());$('confirmNew').hidden=true;$('exampleBanner').hidden=true;onChange();toast('New statement started');});
+$('clearExample').addEventListener('click',()=>{write(blank());$('exampleBanner').hidden=true;onChange();$('name').focus();});
+
+function setTab(prev){document.body.classList.toggle('show-preview',prev);document.body.classList.toggle('show-edit',!prev);
+  $('tabEdit').setAttribute('aria-selected',!prev);$('tabPrev').setAttribute('aria-selected',prev);if(prev)requestAnimationFrame(scale);}
+$('tabEdit').addEventListener('click',()=>setTab(false));$('tabPrev').addEventListener('click',()=>setTab(true));
+setTab(false);
+addEventListener('resize',scale);
+
+// boot
+let saved=null;try{saved=JSON.parse(localStorage.getItem(KEY)||'null')}catch(e){}
+if(saved&&!saved._example){write(saved);}else{write(EXAMPLE);$('exampleBanner').hidden=false;}
+read();
+(document.fonts?document.fonts.ready:Promise.resolve()).then(render);
+render();
+</script>
+
+</body>
+</html>
