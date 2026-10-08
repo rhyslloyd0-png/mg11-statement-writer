@@ -113,6 +113,15 @@ details li b{font-family:var(--mono);color:var(--accent);display:inline-block;wi
 @media (max-width:420px){.fields{grid-template-columns:1fr}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 
+.ai{border-color:var(--accent)}
+.ai textarea{min-height:120px;resize:vertical}
+.ai .row2{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+.ai .status{font-size:13px;color:var(--muted)}
+.ai .status.err{color:#c0392b}
+.ai details{margin-top:10px}
+.ai details .fields{margin-top:10px}
+.hint{font-size:12.5px;color:var(--muted);margin:6px 0 0}
+button[disabled]{opacity:.6;cursor:progress}
 @media print{
   @page{size:A4;margin:0}
   body{background:#fff}
@@ -154,6 +163,25 @@ details li b{font-family:var(--mono);color:var(--accent);display:inline-block;wi
         <span>Clear every field and start a new statement?</span>
         <span style="display:flex;gap:6px"><button type="button" class="danger" id="confirmYes">Clear all</button><button type="button" id="confirmNo">Keep</button></span>
       </div>
+
+      <section class="card ai" id="aiCard">
+        <h2>Draft with Claude</h2>
+        <label>What happened? <small>Paste notes, a rough account or answers to questions. Claude also uses the witness and officer details you've filled in.</small>
+          <textarea id="aiPrompt" placeholder="e.g. Witness saw a blue Ford Fiesta hit a bollard outside the pharmacy on High Street around 11:40 on 8 Oct. Driver white male ~25, grey hoodie, ran down Market Lane..."></textarea></label>
+        <div class="row2">
+          <button type="button" class="primary" id="aiGo">Draft statement</button>
+          <button type="button" id="aiUndo" hidden>Undo draft</button>
+          <span class="status" id="aiStatus" role="status"></span>
+        </div>
+        <details id="aiSettings">
+          <summary>API settings</summary>
+          <div class="fields">
+            <label class="full">Anthropic API key <input id="aiKey" type="password" autocomplete="off" placeholder="sk-ant-..."></label>
+            <label class="full">Model <select id="aiModel"><option value="claude-sonnet-5-5">Claude Sonnet 5.5 (best)</option><option value="claude-haiku-5-5">Claude Haiku 5.5 (faster, cheaper)</option></select></label>
+          </div>
+          <p class="hint">Your key is kept in this browser only and is sent straight to api.anthropic.com. Get one at console.anthropic.com. Always have the witness read and agree the final statement.</p>
+        </details>
+      </section>
 
       <section class="card">
         <h2>Witness</h2>
@@ -418,6 +446,72 @@ function setTab(prev){document.body.classList.toggle('show-preview',prev);docume
 $('tabEdit').addEventListener('click',()=>setTab(false));$('tabPrev').addEventListener('click',()=>setTab(true));
 setTab(false);
 addEventListener('resize',scale);
+
+
+// ---- Draft with Claude ----
+const AIK='mg11-ai-settings';
+try{const a=JSON.parse(localStorage.getItem(AIK)||'{}');if(a.key)$('aiKey').value=a.key;if(a.model)$('aiModel').value=a.model;}catch(e){}
+if(!$('aiKey').value)$('aiSettings').open=true;
+['aiKey','aiModel'].forEach(id=>$(id).addEventListener('change',()=>{try{localStorage.setItem(AIK,JSON.stringify({key:$('aiKey').value.trim(),model:$('aiModel').value}))}catch(e){}}));
+
+const SYS=`You draft MG11 witness statements for England and Wales (Criminal Justice Act 1967, s.9).
+Rules:
+- Write in the first person, as the witness, in plain everyday English the witness would use. No police jargon ("proceeded", "the IP", "male/female" as nouns).
+- Start with "I am the above named person." then who they are and what the statement relates to.
+- Chronological order. Short paragraphs. Include times, places, lighting, weather, distances and durations where given.
+- For any identification, cover ADVOKATE points that the notes support.
+- Only use facts in the notes and form details. Never invent facts. Where a key detail is missing, write a bracketed placeholder like [time] for the officer to complete.
+- End with willingness to attend court only if the notes say so; otherwise add "[Willing to attend court? Confirm with witness]".
+- Do not include the declaration, signatures, URN or headers; those are on the form already.
+Also return any witness details (name, age, occupation) you can find in the notes, so empty form fields can be filled.`;
+
+const TOOL={name:'fill_mg11',description:'Return the drafted MG11 statement and any witness details found in the notes.',
+  input_schema:{type:'object',properties:{
+    statement:{type:'string',description:'The statement body only, paragraphs separated by blank lines.'},
+    name:{type:'string',description:'Witness full name, surname in capitals, if known'},
+    age:{type:'string',description:'"Over 18" or the age if under 18, if known'},
+    occupation:{type:'string'},
+    missing:{type:'array',items:{type:'string'},description:'Short list of important details the officer should still ask the witness about'}
+  },required:['statement']}};
+
+let undoSnap=null;
+function aiStatus(t,err){const el=$('aiStatus');el.textContent=t;el.classList.toggle('err',!!err);}
+$('aiGo').addEventListener('click',async()=>{
+  const key=$('aiKey').value.trim(), notes=$('aiPrompt').value.trim();
+  if(!key){$('aiSettings').open=true;$('aiKey').focus();aiStatus('Add your Anthropic API key first.',true);return;}
+  if(!notes&&!state.body.trim()){$('aiPrompt').focus();aiStatus('Describe what happened first.',true);return;}
+  const ctx=`Form details:
+Witness name: ${state.name||'(blank)'}
+Age if under 18: ${state.age||'(blank)'}
+Occupation: ${state.occupation||'(blank)'}
+Date of statement: ${fmtDate(state.date)||'(blank)'}
+Officer: ${state.officer||'(blank)'} ${state.station?'('+state.station+')':''}
+Place statement taken: ${state.place||'(blank)'}
+
+Notes from the officer / witness:
+${notes||'(none)'}
+${state.body.trim()?'\nExisting statement draft (improve and keep all facts):\n'+state.body.trim():''}`;
+  $('aiGo').disabled=true;aiStatus('Drafting…');
+  try{
+    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
+      headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:$('aiModel').value,max_tokens:4000,system:SYS,tools:[TOOL],tool_choice:{type:'tool',name:'fill_mg11'},messages:[{role:'user',content:ctx}]})});
+    const data=await r.json();
+    if(!r.ok){const m=data?.error?.message||r.statusText;throw new Error(r.status===401?'That API key was rejected. Check it in API settings.':m);}
+    const out=(data.content||[]).find(b=>b.type==='tool_use')?.input;
+    if(!out?.statement)throw new Error('Claude returned no statement. Try again.');
+    undoSnap={...state};
+    $('body').value=out.statement.trim();
+    if(out.name&&!$('name').value.trim())$('name').value=out.name;
+    if(out.occupation&&!$('occupation').value.trim())$('occupation').value=out.occupation;
+    if(out.age&&(!$('age').value.trim()||$('age').value==='Over 18'))$('age').value=out.age;
+    $('exampleBanner').hidden=true;$('aiUndo').hidden=false;onChange();
+    const miss=(out.missing||[]).filter(Boolean);
+    aiStatus(miss.length?`Drafted. Still to ask: ${miss.join('; ')}.`:'Drafted. Check every line with the witness.');
+  }catch(e){aiStatus(e.message==='Failed to fetch'?'Could not reach the Anthropic API. Check your connection.':e.message,true);}
+  finally{$('aiGo').disabled=false;}
+});
+$('aiUndo').addEventListener('click',()=>{if(!undoSnap)return;write(undoSnap);undoSnap=null;$('aiUndo').hidden=true;onChange();aiStatus('Draft undone.');});
 
 // boot
 let saved=null;try{saved=JSON.parse(localStorage.getItem(KEY)||'null')}catch(e){}
