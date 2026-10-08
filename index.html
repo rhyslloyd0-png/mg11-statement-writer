@@ -122,6 +122,21 @@ details li b{font-family:var(--mono);color:var(--accent);display:inline-block;wi
 .ai details .fields{margin-top:10px}
 .hint{font-size:12.5px;color:var(--muted);margin:6px 0 0}
 button[disabled]{opacity:.6;cursor:progress}
+.seg{display:inline-flex;gap:2px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:2px}
+.seg button{border:0;background:transparent;color:var(--muted);font-size:13px;padding:5px 12px;border-radius:6px}
+.seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--fg)}
+.simple{background:var(--paper);color:var(--ink);box-shadow:var(--shadow);max-width:794px;width:100%;padding:44px 56px 52px;font-family:var(--doc);font-size:15.5px;line-height:1.6;overflow-wrap:anywhere}
+.simple h3{margin:0 0 18px;font-size:19px;letter-spacing:.04em;text-transform:uppercase}
+.simple .kv p{margin:0}
+.simple .body p{margin:16px 0}
+.simple .body ul{margin:10px 0 16px;padding-left:26px}
+.simple .body li{margin:4px 0}
+.simple .truth{margin-top:22px}
+.simple .signs{display:grid;gap:16px;margin-top:22px}
+.simple .signs b{margin-right:8px}
+.simple .line{display:inline-block;min-width:min(260px,60%);border-bottom:1.2px solid var(--rule);vertical-align:bottom;min-height:24px}
+.simple .ph{color:#777}
+@media (max-width:600px){.simple{padding:26px 20px 32px;font-size:15px}}
 @media print{
   @page{size:A4;margin:0}
   body{background:#fff}
@@ -133,6 +148,7 @@ button[disabled]{opacity:.6;cursor:progress}
   .pagebox{width:210mm!important;height:297mm!important;break-after:page;overflow:hidden}
   .pagebox:last-child{break-after:auto}
   .page{transform:scale(1)!important;box-shadow:none;width:210mm;height:297mm}
+  .simple{box-shadow:none;max-width:none;padding:18mm 20mm}
 }
 </style>
 
@@ -173,6 +189,7 @@ button[disabled]{opacity:.6;cursor:progress}
           <button type="button" id="aiUndo" hidden>Undo draft</button>
           <span class="status" id="aiStatus" role="status"></span>
         </div>
+        <p class="hint" id="aiSubNote" hidden>Uses your Claude subscription. Claude asks once before the first draft.</p>
         <details id="aiSettings">
           <summary>API settings</summary>
           <div class="fields">
@@ -186,7 +203,9 @@ button[disabled]{opacity:.6;cursor:progress}
       <section class="card">
         <h2>Witness</h2>
         <div class="fields">
-          <label class="full">Statement of <small>Full name of the witness</small><input id="name" autocomplete="off"></label>
+          <label class="full">Statement of <small>Full name of the person making the statement</small><input id="name" autocomplete="off"></label>
+          <label class="full">Collar / badge no. <small>If the witness is an officer</small><input id="badge" autocomplete="off"></label>
+          <input type="hidden" id="layout" value="simple">
           <label>Age if under 18 <input id="age" placeholder="Over 18"></label>
           <label>Occupation <input id="occupation"></label>
           <label>URN <small>Unique reference number</small><input id="urn" style="font-family:var(--mono)"></label>
@@ -251,7 +270,7 @@ button[disabled]{opacity:.6;cursor:progress}
     </div>
 
     <div class="preview">
-      <div class="preview-head"><span>Live A4 preview</span><span id="pvCount"></span></div>
+      <div class="preview-head"><div class="seg" role="group" aria-label="Layout"><button type="button" data-layout="simple">Simple</button><button type="button" data-layout="form">MG11 form</button></div><span id="pvCount"></span></div>
       <div class="pages" id="pages"></div>
     </div>
   </div>
@@ -259,14 +278,14 @@ button[disabled]{opacity:.6;cursor:progress}
 <div class="toast" id="toast" hidden></div>
 
 <script>
-const F=['name','age','occupation','urn','date','typedSig','vrec','body','officer','station','tFrom','tTo','place','incDetails','addr','postcode','dob','phone','email','avoid'];
+const F=['name','badge','layout','age','occupation','urn','date','typedSig','vrec','body','officer','station','tFrom','tTo','place','incDetails','addr','postcode','dob','phone','email','avoid'];
 const $=id=>document.getElementById(id);
 const KEY='mg11-draft-v1';
 const PAGE_W=794, PAGE_H=1123, LH=24, TEXT_W=794-112;
 
 const EXAMPLE={
   name:'Daniel James MORGAN',age:'Over 18',occupation:'Barista',urn:'01AB2345626',date:'2026-10-08',
-  typedSig:true,vrec:false,officer:'PC 4127 OKAFOR',station:'Central',tFrom:'14:20',tTo:'15:05',place:'Front office, Central police station',
+  typedSig:true,vrec:false,badge:'',layout:'simple',officer:'PC 4127 OKAFOR',station:'Central',tFrom:'14:20',tTo:'15:05',place:'Front office, Central police station',
   incDetails:false,addr:'',postcode:'',dob:'',phone:'',email:'',avoid:'',
   body:`I am the above named person. I work as a barista at a coffee shop on High Street. This statement relates to a vehicle collision I saw on Thursday 8th October 2026.
 
@@ -295,14 +314,14 @@ let state={};
 function read(){F.forEach(k=>{const el=$(k);state[k]=el.type==='checkbox'?el.checked:el.value});}
 function write(d){F.forEach(k=>{const el=$(k);if(el.type==='checkbox')el.checked=!!d[k];else el.value=d[k]||''});}
 function save(){try{localStorage.setItem(KEY,JSON.stringify({...state,_example:!$('exampleBanner').hidden}))}catch(e){}}
-function blank(){const d={};F.forEach(k=>d[k]='');d.typedSig=false;d.vrec=false;d.incDetails=false;d.age='Over 18';d.date=new Date().toISOString().slice(0,10);return d;}
+function blank(){const d={};F.forEach(k=>d[k]='');d.typedSig=false;d.vrec=false;d.incDetails=false;d.age='Over 18';d.date=new Date().toISOString().slice(0,10);d.layout=state.layout||'simple';return d;}
 
 // ---- text wrapping using canvas measure ----
 const cv=document.createElement('canvas').getContext('2d');
 function wrapText(text){
   cv.font='15px Arimo, Arial, Helvetica, sans-serif';
   const out=[];
-  text.replace(/\r/g,'').split('\n').forEach(par=>{
+  text.replace(/\r/g,'').split('\n').map(l=>l.replace(/^\s*[-*•]\s+/,'•  ')).forEach(par=>{
     if(!par.trim()){out.push('');return;}
     let line='';
     par.split(/ +/).forEach(word=>{
@@ -375,8 +394,45 @@ function strike(body,used){
   body.insertAdjacentHTML('beforeend',`<svg width="${TEXT_W}" height="${h}" aria-hidden="true"><line x1="0" y1="${y}" x2="${TEXT_W}" y2="${h-4}" stroke="#222" stroke-width="1.2"/></svg>`);
 }
 
+function simpleBody(text){
+  const out=[];let list=null;
+  text.replace(/\r/g,'').split('\n').forEach(raw=>{
+    const m=raw.match(/^\s*[-*•]\s+(.*)$/);
+    if(m){if(!list){list=[];out.push({list});}list.push(m[1]);return;}
+    list=null;
+    if(!raw.trim()){out.push({gap:true});return;}
+    const last=out[out.length-1];
+    if(last&&last.p!==undefined)last.p+='\n'+raw;else out.push({p:raw});
+  });
+  return out.map(b=>b.list?`<ul>${b.list.map(i=>`<li>${esc(i)}</li>`).join('')}</ul>`:b.p!==undefined?`<p>${esc(b.p).replace(/\n/g,'<br>')}</p>`:'').join('');
+}
+function renderSimple(host){
+  const ph=t=>`<span class="ph">[${t}]</span>`;
+  host.innerHTML=`<article class="simple">
+    <h3>MG11 – Witness Statement</h3>
+    <div class="kv">
+      <p><b>Statement of:</b> ${state.name?esc(state.name):ph('Name')}</p>
+      ${state.badge||state.layout==='simple'?`<p><b>Collar/Badge No.:</b> ${state.badge?esc(state.badge):ph('Number')}</p>`:''}
+      <p><b>Date:</b> ${state.date?fmtDate(state.date):ph('Date')}</p>
+      ${state.urn?`<p><b>URN:</b> <span style="font-family:var(--mono)">${esc(state.urn)}</span></p>`:''}
+    </div>
+    <div class="body">${simpleBody(state.body||'')||'<p class="ph">Your statement will appear here.</p>'}</div>
+    <p class="truth">I believe that the facts stated in this witness statement are true.</p>
+    <div class="signs">
+      <div><b>Signed:</b><span class="line">${sigHTML()}</span></div>
+      <div><b>Date:</b><span class="line">${state.typedSig&&state.date?fmtDate(state.date):''}</span></div>
+    </div></article>`;
+}
+function syncLayoutButtons(){document.querySelectorAll('[data-layout]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.layout===(state.layout||'simple'))));}
 function render(){
   const host=$('pages');host.innerHTML='';
+  syncLayoutButtons();
+  if(state.layout!=='form'){
+    renderSimple(host);
+    const w=(state.body.trim().match(/\S+/g)||[]).length;
+    $('words').textContent=`${w} word${w===1?'':'s'}`;$('pagesInfo').textContent='Simple layout';$('pvCount').textContent='';$('tabCount').textContent='';
+    return;
+  }
   const lines=wrapText(state.body||'');
   // measure capacities offscreen (the preview may be hidden on phones)
   let m=document.getElementById('measurer');
@@ -411,6 +467,12 @@ function scale(){
 
 function plainText(){
   const L=[];
+  if(state.layout!=='form'){
+    L.push('MG11 – WITNESS STATEMENT','',`Statement of: ${state.name||'[Name]'}`,`Collar/Badge No.: ${state.badge||'[Number]'}`,`Date: ${fmtDate(state.date)||'[Date]'}`);
+    if(state.urn)L.push(`URN: ${state.urn}`);
+    L.push('',state.body.trim().replace(/^\s*[-*]\s+/gm,'• '),'','I believe that the facts stated in this witness statement are true.','',`Signed: ${state.typedSig?state.name:'____________________'}`,'',`Date: ${state.typedSig?fmtDate(state.date):'____________________'}`);
+    return L.join('\n');
+  }
   L.push('RESTRICTED (when complete)                                   MG 11','WITNESS STATEMENT','Criminal Procedure Rules, r 16.2; Criminal Justice Act 1967, s. 9; Magistrates\' Courts Act 1980, s.5B','');
   L.push(`URN: ${state.urn}`,`Statement of: ${state.name}`,`Age if under 18: ${state.age||'Over 18'}`,`Occupation: ${state.occupation}`,'');
   const n=$('pages').querySelectorAll('.pagebox').length-(state.incDetails?1:0);
@@ -447,6 +509,7 @@ $('clearExample').addEventListener('click',()=>{write(blank());$('exampleBanner'
 
 function setTab(prev){document.body.classList.toggle('show-preview',prev);document.body.classList.toggle('show-edit',!prev);
   $('tabEdit').setAttribute('aria-selected',!prev);$('tabPrev').setAttribute('aria-selected',prev);if(prev)requestAnimationFrame(render);}
+document.querySelectorAll('[data-layout]').forEach(b=>b.addEventListener('click',()=>{$('layout').value=b.dataset.layout;onChange();render();}));
 $('tabEdit').addEventListener('click',()=>setTab(false));$('tabPrev').addEventListener('click',()=>setTab(true));
 setTab(false);
 addEventListener('resize',scale);
@@ -455,13 +518,15 @@ addEventListener('resize',scale);
 // ---- Draft with Claude ----
 const AIK='mg11-ai-settings';
 try{const a=JSON.parse(localStorage.getItem(AIK)||'{}');if(a.key)$('aiKey').value=a.key;if(a.model)$('aiModel').value=a.model;}catch(e){}
-if(!$('aiKey').value)$('aiSettings').open=true;
+
 ['aiKey','aiModel'].forEach(id=>$(id).addEventListener('change',()=>{try{localStorage.setItem(AIK,JSON.stringify({key:$('aiKey').value.trim(),model:$('aiModel').value}))}catch(e){}}));
 
 const SYS=`You draft MG11 witness statements for England and Wales (Criminal Justice Act 1967, s.9).
 Rules:
-- Write in the first person, as the witness, in plain everyday English the witness would use. No police jargon ("proceeded", "the IP", "male/female" as nouns).
-- Start with "I am the above named person." then who they are and what the statement relates to.
+- Write in the first person, as the person making the statement.
+- If a collar/badge number is given, or the notes are written from a police officer's point of view, write an officer's statement: open with "I am a police officer serving with [force]." (use the force if given), refer to legal powers only where the notes name them, and use plain professional language.
+- Otherwise it is a civilian witness: open with "I am the above named person." then who they are and what the statement relates to, in plain everyday English the witness would use. No police jargon ("proceeded", "the IP", "male/female" as nouns).
+- When listing items seized, found or stolen, put each on its own line starting with "- ".
 - Chronological order. Short paragraphs. Include times, places, lighting, weather, distances and durations where given.
 - For any identification, cover ADVOKATE points that the notes support.
 - Only use facts in the notes and form details. Never invent facts. Where a key detail is missing, write a bracketed placeholder like [time] for the officer to complete.
@@ -473,19 +538,36 @@ const TOOL={name:'fill_mg11',description:'Return the drafted MG11 statement and 
   input_schema:{type:'object',properties:{
     statement:{type:'string',description:'The statement body only, paragraphs separated by blank lines.'},
     name:{type:'string',description:'Witness full name, surname in capitals, if known'},
+    badge:{type:'string',description:'Collar/badge number if the witness is an officer'},
     age:{type:'string',description:'"Over 18" or the age if under 18, if known'},
     occupation:{type:'string'},
     missing:{type:'array',items:{type:'string'},description:'Short list of important details the officer should still ask the witness about'}
   },required:['statement']}};
 
+let sampleFn=null;
+if(window.claude&&claude.use){claude.use('sample').then(fn=>{if(!fn)return;sampleFn=fn;$('aiSettings').hidden=true;$('aiSubNote').hidden=false;}).catch(()=>{});}
+function applyDraft(out){
+  if(!out||typeof out.statement!=='string'||!out.statement.trim())throw new Error('Claude returned no statement. Try again.');
+  undoSnap={...state};
+  $('body').value=out.statement.trim();
+  if(out.name&&!$('name').value.trim())$('name').value=out.name;
+  if(out.badge&&!$('badge').value.trim())$('badge').value=out.badge;
+  if(out.occupation&&!$('occupation').value.trim())$('occupation').value=out.occupation;
+  if(out.age&&(!$('age').value.trim()||$('age').value==='Over 18'))$('age').value=out.age;
+  $('exampleBanner').hidden=true;$('aiUndo').hidden=false;onChange();
+  const miss=(Array.isArray(out.missing)?out.missing:[]).filter(Boolean);
+  aiStatus(miss.length?`Drafted. Still to ask: ${miss.join('; ')}.`:'Drafted. Check every line with the witness.');
+}
+const SAMPLE_ERR={not_granted:'Claude access was declined for this page.',sampling_disabled:'Claude is not available on this account.',rate_limited:'Usage limit reached. Try again later.',session_expired:'Sign in to Claude again, then retry.',refused:'Claude declined to draft this. Try rewording the notes.',invalid_json:'Claude replied in the wrong format. Try again.'};
 let undoSnap=null;
 function aiStatus(t,err){const el=$('aiStatus');el.textContent=t;el.classList.toggle('err',!!err);}
 $('aiGo').addEventListener('click',async()=>{
   const key=$('aiKey').value.trim(), notes=$('aiPrompt').value.trim();
-  if(!key){$('aiSettings').open=true;$('aiKey').focus();aiStatus('Add your Anthropic API key first.',true);return;}
+  if(!key&&!sampleFn){$('aiSettings').open=true;$('aiKey').focus();aiStatus('Add your Anthropic API key first.',true);return;}
   if(!notes&&!state.body.trim()){$('aiPrompt').focus();aiStatus('Describe what happened first.',true);return;}
   const ctx=`Form details:
 Witness name: ${state.name||'(blank)'}
+Collar/badge no.: ${state.badge||'(blank)'}
 Age if under 18: ${state.age||'(blank)'}
 Occupation: ${state.occupation||'(blank)'}
 Date of statement: ${fmtDate(state.date)||'(blank)'}
@@ -495,7 +577,15 @@ Place statement taken: ${state.place||'(blank)'}
 Notes from the officer / witness:
 ${notes||'(none)'}
 ${state.body.trim()?'\nExisting statement draft (improve and keep all facts):\n'+state.body.trim():''}`;
-  $('aiGo').disabled=true;aiStatus('Drafting…');
+  $('aiGo').disabled=true;aiStatus('Drafting… this can take up to a minute.');
+  if(sampleFn){
+    try{
+      const out=await sampleFn.json(SYS+'\n\n'+ctx+'\n\nReply with only a JSON object: {"statement": string (body only, paragraphs separated by blank lines), "name": string or "", "badge": string or "", "age": string or "", "occupation": string or "", "missing": [short strings of details still to ask]}',{cache:false});
+      applyDraft(out);
+    }catch(e){aiStatus(e&&e.code?(SAMPLE_ERR[e.code]||'Something went wrong. Try again.'):(e.message||'Something went wrong.'),true);}
+    finally{$('aiGo').disabled=false;}
+    return;
+  }
   try{
     const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
       headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
@@ -503,15 +593,7 @@ ${state.body.trim()?'\nExisting statement draft (improve and keep all facts):\n'
     const data=await r.json();
     if(!r.ok){const m=data?.error?.message||r.statusText;throw new Error(r.status===401?'That API key was rejected. Check it in API settings.':m);}
     const out=(data.content||[]).find(b=>b.type==='tool_use')?.input;
-    if(!out?.statement)throw new Error('Claude returned no statement. Try again.');
-    undoSnap={...state};
-    $('body').value=out.statement.trim();
-    if(out.name&&!$('name').value.trim())$('name').value=out.name;
-    if(out.occupation&&!$('occupation').value.trim())$('occupation').value=out.occupation;
-    if(out.age&&(!$('age').value.trim()||$('age').value==='Over 18'))$('age').value=out.age;
-    $('exampleBanner').hidden=true;$('aiUndo').hidden=false;onChange();
-    const miss=(out.missing||[]).filter(Boolean);
-    aiStatus(miss.length?`Drafted. Still to ask: ${miss.join('; ')}.`:'Drafted. Check every line with the witness.');
+    applyDraft(out);
   }catch(e){aiStatus(e.message==='Failed to fetch'?'Could not reach the Anthropic API. Check your connection.':e.message,true);}
   finally{$('aiGo').disabled=false;}
 });
@@ -519,7 +601,7 @@ $('aiUndo').addEventListener('click',()=>{if(!undoSnap)return;write(undoSnap);un
 
 // boot
 let saved=null;try{saved=JSON.parse(localStorage.getItem(KEY)||'null')}catch(e){}
-if(saved&&!saved._example){write(saved);}else{write(EXAMPLE);$('exampleBanner').hidden=false;}
+if(saved&&!saved._example){if(!saved.layout)saved.layout='simple';write(saved);}else{write(EXAMPLE);$('exampleBanner').hidden=false;}
 read();
 (document.fonts?document.fonts.ready:Promise.resolve()).then(render);
 render();
