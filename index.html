@@ -125,7 +125,7 @@ button[disabled]{opacity:.6;cursor:progress}
 @media print{
   @page{size:A4;margin:0}
   body{background:#fff}
-  .wrap>*:not(.grid),.editor,.preview-head,.tabs,.toast{display:none!important}
+  #measurer,.wrap>*:not(.grid),.editor,.preview-head,.tabs,.toast{display:none!important}
   .wrap{padding:0;max-width:none}
   .grid{display:block}
   .preview{position:static;display:block!important}
@@ -378,11 +378,15 @@ function strike(body,used){
 function render(){
   const host=$('pages');host.innerHTML='';
   const lines=wrapText(state.body||'');
-  // measure capacities
-  let b=mount(page1(1),host);const cap1=Math.floor(b.querySelector('.p-body').offsetHeight/LH);
-  let c=mount(pageN(2,2),host);const capN=Math.floor(c.querySelector('.p-body').offsetHeight/LH);
-  host.innerHTML='';
-  const n=1+Math.max(0,Math.ceil((lines.length-cap1)/capN));
+  // measure capacities offscreen (the preview may be hidden on phones)
+  let m=document.getElementById('measurer');
+  if(!m){m=document.createElement('div');m.id='measurer';m.setAttribute('aria-hidden','true');m.style.cssText='position:absolute;left:-10000px;top:0;width:800px;visibility:hidden;pointer-events:none';document.body.appendChild(m);}
+  m.innerHTML='';
+  const b=mount(page1(1),m), c=mount(pageN(2,2),m);
+  const cap1=Math.max(5,Math.floor(b.querySelector('.p-body').offsetHeight/LH)||28);
+  const capN=Math.max(5,Math.floor(c.querySelector('.p-body').offsetHeight/LH)||38);
+  m.innerHTML='';
+  const n=Math.min(200,1+Math.max(0,Math.ceil((lines.length-cap1)/capN)));
   const boxes=[];
   let rest=lines.slice();
   for(let i=1;i<=n;i++){
@@ -442,7 +446,7 @@ $('confirmYes').addEventListener('click',()=>{write(blank());$('confirmNew').hid
 $('clearExample').addEventListener('click',()=>{write(blank());$('exampleBanner').hidden=true;onChange();$('name').focus();});
 
 function setTab(prev){document.body.classList.toggle('show-preview',prev);document.body.classList.toggle('show-edit',!prev);
-  $('tabEdit').setAttribute('aria-selected',!prev);$('tabPrev').setAttribute('aria-selected',prev);if(prev)requestAnimationFrame(scale);}
+  $('tabEdit').setAttribute('aria-selected',!prev);$('tabPrev').setAttribute('aria-selected',prev);if(prev)requestAnimationFrame(render);}
 $('tabEdit').addEventListener('click',()=>setTab(false));$('tabPrev').addEventListener('click',()=>setTab(true));
 setTab(false);
 addEventListener('resize',scale);
